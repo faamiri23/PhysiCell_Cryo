@@ -43,6 +43,7 @@ std::vector<Cell*> colored_cell_list;
 //Create hepatocyte cells type and set the required parameters and variables
 void create_hepatocyte_cell_type(void)
 {
+    // Hepatocyte cells are type 4
 	hepatocyte_cell = cell_defaults;
 
 	hepatocyte_cell.name = "hepatocyte cell";
@@ -94,17 +95,20 @@ void create_hepatocyte_cell_type(void)
 	hepatocyte_cell.custom_data["Lp_salt"]=0.00135;
 	hepatocyte_cell.custom_data["Ps_salt"]=0;
     hepatocyte_cell.custom_data["Csalt"]=0.15*1e-15;//mol/kg=mol/L=fmol/mm^3
-    
+    //Initial Temperature
     hepatocyte_cell.custom_data["Tseed"]= 273.15-1.0;//mol/kg=mol/L=fmol/mm^3
+
     hepatocyte_cell.custom_data["T_f0"]= 273.15-0.52;
-    
+    //Thermodaynamics coefficients
     hepatocyte_cell.custom_data["omega"]=110e-4;
     hepatocyte_cell.custom_data["kapa"]=14.0e8;
 
 	hepatocyte_cell.custom_data["Area"]=1.4120e+03;
 	hepatocyte_cell.custom_data["R"]= 0.0821;
     hepatocyte_cell.custom_data.add_variable("Temperature","unitless" ,271.0);
-    hepatocyte_cell.custom_data.add_variable("tau_t","unitless" ,0.0); //dimensionless time
+    //dimensionless time
+    hepatocyte_cell.custom_data.add_variable("tau_t","unitless" ,0.0);
+
 	hepatocyte_cell.custom_data["isosmotic_volume"]=4.9889e+03; 
 	hepatocyte_cell.custom_data["Partial_molar_volume"]=0.0368;
 	hepatocyte_cell.custom_data["Vb_fraction"]=0.51;
@@ -210,6 +214,8 @@ void create_cell_types( void )
 		cell_defaults.custom_data.add_variable( "kill rate" , "1/min" , 0 ); // how often it tries to kill
 		cell_defaults.custom_data.add_variable( "attachment lifetime" , "min" , 0 ); // how long it can stay attached
 		cell_defaults.custom_data.add_variable( "attachment rate" , "1/min" ,0 ); // how long it wants to wander before attaching
+
+        //Water Transport variable
 		cell_defaults.custom_data.add_variable("dVw_dt_1", "unitless", 0.0);
         cell_defaults.custom_data.add_variable("dVcs_dt_1", "unitless", 0.0);
 		cell_defaults.custom_data.add_variable("dS_dt_1", "unitless", 0.0);
@@ -217,7 +223,7 @@ void create_cell_types( void )
         cell_defaults.custom_data.add_variable("tau_t", "unitless", 0.0);
 		cell_defaults.custom_data.add_variable("Prev_total_volume","unitless",0);
 		cell_defaults.custom_data.add_variable("test_current_voxel","unitless",0);
-        
+        //Monte-Carlo methods variable
         cell_defaults.custom_data.add_variable("fvecold", "unitless", 0);
         cell_defaults.custom_data.add_variable("fvec", "unitless", 0);
         cell_defaults.custom_data.add_variable("knew", "unitless", 0);
@@ -299,7 +305,7 @@ if(sqrt(norm_squared(tempPoint))< sphere_radius)
   for(int j=1;j<3;j++)
 	{
     r += 2*cell_radius;
-    int k=0, i=0;
+    int i=0;
     if (j==1)
     {   while (i<7)
         {
@@ -394,7 +400,7 @@ std::vector<std::string> follicle_coloring_function( Cell* pCell )
 
 //-------------------------------------------------------------------------------------
 /* Check for the water volume of each cell (agent), check if the cell is frozen,
-update the cell position and volume based on the mount of water lost and freezing time.*/
+update the cell position and volume based on the amount of water lost and freezing time.*/
 //-------------------------------------------------------------------------------------
 void hepatocyte_cell_rule( Cell* pCell, Phenotype& phenotype, double dt )
 {
@@ -417,7 +423,8 @@ void hepatocyte_cell_rule( Cell* pCell, Phenotype& phenotype, double dt )
      
     // Check the Monte-Carlo saved results for each cell (agent). The Monte-Carlo 
     //results indicate which cell is frozen.	
-     if (pCell->custom_data["Freezing_time"]<= pCell->custom_data["tau_t"] && abs(pCell->custom_data["Freezing_time"]- pCell->custom_data["tau_t"])<0.1&& pCell->custom_data["Active_cell_volume"]>0)  
+    // Note that you should use a smaller tolerance value than 0.1 but then you need a smaller time steps for computation (PhysiCell.global time steps inculding mechanical time steps)
+     if (pCell->custom_data["Freezing_time"]<= pCell->custom_data["tau_t"] && fabs(pCell->custom_data["Freezing_time"]- pCell->custom_data["tau_t"])<0.1&& pCell->custom_data["Active_cell_volume"]>0)
      {
 		 // Update the state of the cell to be frozen
          pCell->state.ice_state =1;
@@ -445,7 +452,6 @@ void hepatocyte_phenotype_rule( Cell* pCell, Phenotype& phenotype, double dt )
 void WaterTransportModel_NoCPA(Cell* pCell, Phenotype& phenotype, double dt )
 {
 	// gets the volume of each voxel, they are all the same
-	static double voxel_volume = microenvironment.mesh.voxels[0].volume;
 	double TR = 273.15;//refrence Temperature
 	double R1 =8.3145e-3; //KJ/molKelvin
 	double R2 =0.0821e15; //micm^3 atm /molKelvin
@@ -497,7 +503,7 @@ void WaterTransportModel_NoCPA(Cell* pCell, Phenotype& phenotype, double dt )
 
 	pCell->custom_data["Prev_total_volume"]=pCell->phenotype.volume.total;
 
-    pCell->custom_data["Temperature"] =272.15000-B*t;
+    pCell->custom_data["Temperature"] =pCell->custom_data["Tseed"]-B*t;
 
 	return;
 }
@@ -543,13 +549,9 @@ void dimensionless_time_NoCPA(Cell* pCell, Phenotype& phenotype, double dt )
     double Int_het=0.0;
 
     double tau_T =(T_f/T_f0)*(T_f/T_f0)*(T_f/T_f0)*(T_f/T_f0);
-    double r3=0.75*3.14*V_cell;
-
-    double r =  std::cbrt(r3);
 	
-    double Area1=4*3.14*r*r;
-    double Area_0=pCell->custom_data["Area"];
-    double Area=Area_0;
+    double Area=pCell->custom_data["Area"];
+
 
     
     for (int k=0;k<n;k++)
@@ -635,7 +637,6 @@ void Gillespie_Model(void)
     int  f_sum =0; 
     double a0 = 1;
     int z=0;
-    int k=0;
     //Will be used to obtain a seed for the random number engine
     std::random_device rd;  
 	//Standard mersenne_twister_engine seeded with rd()

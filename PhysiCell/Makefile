@@ -1,6 +1,6 @@
 PROGRAM_NAME := hepatocyte-cryopreservation
 
-CC := g++ -g
+CC := g++
 # CC := g++-mp-7 # typical macports compiler name
 # CC := g++-7 # typical homebrew compiler name 
 
